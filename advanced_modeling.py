@@ -4,8 +4,15 @@ import soundfile as sf
 from scipy.signal import butter, lfilter
 
 # Generate initial noise
-def generate_initial_noise(length):
-    return np.random.uniform(-1.15, 1.15, size=length)
+def generate_noise(length, range, seed=None):
+    if seed is not None:
+        np.random.seed(seed)
+    return np.random.uniform(-range, range, size=length)
+
+def generate_initial_noise(range, sample_rate, frequency, stretch_factor, seed=None):
+    buffer_length = int(sample_rate / (frequency * stretch_factor))
+    buffer = generate_noise(buffer_length, range, seed)
+    return buffer
 
 # Apply an ADSR envelope to the samples
 def apply_adsr_envelope(samples, attack_time, decay_time, sustain_level, release_time, sample_rate):
@@ -33,12 +40,12 @@ def apply_low_pass_filter(samples, cutoff_frequency, sample_rate):
 
 # Karplus-Strong algorithm
 # https://en.wikipedia.org/wiki/Karplus–Strong_string_synthesis
-def karplus_strong(frequency, duration, decay_factor, attack_time, decay_time, sustain_level, release_time,
-                   cutoff_frequency, stretch_factor, use_adsr=True, use_low_pass_filter=True):
-    sample_rate = 44100  # Assuming a sample rate of 44100 Hz
+def karplus_strong(sample_rate, buffer, duration, decay_factor, attack_time, decay_time, sustain_level, release_time,
+                   cutoff_frequency, use_adsr=True, use_low_pass_filter=True):
+    # sample_rate = 44100  # Assuming a sample rate of 44100 Hz
     samples = int(duration * sample_rate)
-    buffer_length = int(sample_rate / (frequency * stretch_factor))
-    buffer = generate_initial_noise(buffer_length)
+    # buffer_length = int(sample_rate / (frequency * stretch_factor))
+    # buffer = generate_initial_noise(buffer_length)
     output = np.zeros(samples)
 
     for i in range(samples):
@@ -60,10 +67,14 @@ def calculate_frequency(note_number, tuning_frequency):
     return tuning_frequency * 2 ** ((note_number - 69) / 12)
 
 ## Parameters
+sample_rate = 44100
 tuning_frequency = 440.0  # A4 tuning frequency in Hz
 duration = 3.0  # Duration of generated sound in seconds
 decay_factor = 0.995  # Decay factor for the Karplus-Strong algorithm
 stretch_factor = 1.0  # Stretch factor to adjust the duration of the generated sound
+noise_range = 1.15 # Range for the initial noise
+noise_seed = 19 # Seed to use for generating noise. It will be completely random with None
+
 
 ### ADSR Envelope
 apply_adsr = True
@@ -76,7 +87,9 @@ release_time = 0.3  # Release time for the ADSR envelope in seconds
 apply_low_pass = False
 cutoff_frequency = 2650.0  # Cutoff frequency for the low-pass filter in Hz
 
-i = 4
+### Output file
+save_output = False # Whether or not to save the output to a file
+file_number = 0 # Initial number for saved file. Number is incremented by 1 for every file
 
 # Infinite loop to generate, play, and save samples
 while True:
@@ -91,12 +104,14 @@ while True:
             continue
 
         frequency = calculate_frequency(note_number, tuning_frequency)
-        samples = karplus_strong(frequency, duration, decay_factor, attack_time, decay_time,
-                                 sustain_level, release_time, cutoff_frequency, stretch_factor,
+        noise = generate_initial_noise(noise_range, sample_rate, frequency, stretch_factor, noise_seed)
+        samples = karplus_strong(sample_rate, noise, duration, decay_factor, attack_time, decay_time,
+                                 sustain_level, release_time, cutoff_frequency,
                                  use_adsr=apply_adsr, use_low_pass_filter=apply_low_pass)
         sd.play(samples, blocking=False)
-        # sf.write("output/n" + str(i) + ".wav", samples, samplerate=44100)
-        i += 1
+        if save_output:
+            sf.write("output/n" + str(file_number) + ".wav", samples, samplerate=44100)
+            file_number += 1
 
     except ValueError:
         print("Invalid input. Please enter a valid MIDI note number.")
