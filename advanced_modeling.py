@@ -54,17 +54,32 @@ def karplus_strong(sample_rate, buffer, duration, decay_factor, attack_time, dec
         buffer[0:-1] = buffer[1:]
         buffer[-1] = decay_factor * 0.5 * (buffer[0] + buffer[1])
 
-    if use_adsr:
-        output = apply_adsr_envelope(output, attack_time, decay_time, sustain_level, release_time, sample_rate)
+    # if use_adsr:
+    #     output = apply_adsr_envelope(output, attack_time, decay_time, sustain_level, release_time, sample_rate)
 
-    if use_low_pass_filter:
-        output = apply_low_pass_filter(output, cutoff_frequency, sample_rate)
+    # if use_low_pass_filter:
+    #     output = apply_low_pass_filter(output, cutoff_frequency, sample_rate)
 
     return output
 
 # Function to calculate frequency from MIDI note number
 def calculate_frequency(note_number, tuning_frequency):
     return tuning_frequency * 2 ** ((note_number - 69) / 12)
+
+# Wrapper function for all the needed functions
+def generate_samples(frequency, sample_rate, duration, decay_factor, stretch_factor, noise_range, noise_seed,
+         apply_adsr, attack_time, decay_time, sustain_level, release_time,
+         apply_low_pass, cutoff_frequency):
+    noise = generate_initial_noise(noise_range, sample_rate, frequency, stretch_factor, noise_seed)
+    samples = karplus_strong(sample_rate, noise, duration, decay_factor, attack_time, decay_time,
+                                 sustain_level, release_time, cutoff_frequency,
+                                 use_adsr=apply_adsr, use_low_pass_filter=apply_low_pass)
+    if apply_adsr:
+        samples = apply_adsr_envelope(samples, attack_time, decay_time, sustain_level, release_time, sample_rate)
+
+    if apply_low_pass:
+        samples = apply_low_pass_filter(samples, cutoff_frequency, sample_rate)
+    return samples
 
 ## Parameters
 sample_rate = 44100
@@ -104,10 +119,28 @@ while True:
             continue
 
         frequency = calculate_frequency(note_number, tuning_frequency)
-        noise = generate_initial_noise(noise_range, sample_rate, frequency, stretch_factor, noise_seed)
-        samples = karplus_strong(sample_rate, noise, duration, decay_factor, attack_time, decay_time,
-                                 sustain_level, release_time, cutoff_frequency,
-                                 use_adsr=apply_adsr, use_low_pass_filter=apply_low_pass)
+        samples = generate_samples(
+            frequency,
+            sample_rate,
+            duration,
+            decay_factor,
+            stretch_factor,
+            noise_range,
+            noise_seed,
+
+            apply_adsr,
+            attack_time,
+            decay_time,
+            sustain_level,
+            release_time,
+            
+            apply_low_pass,
+            cutoff_frequency
+        )
+        # noise = generate_initial_noise(noise_range, sample_rate, frequency, stretch_factor, noise_seed)
+        # samples = karplus_strong(sample_rate, noise, duration, decay_factor, attack_time, decay_time,
+        #                          sustain_level, release_time, cutoff_frequency,
+        #                          use_adsr=apply_adsr, use_low_pass_filter=apply_low_pass)
         sd.play(samples, blocking=False)
         if save_output:
             sf.write("output/n" + str(file_number) + ".wav", samples, samplerate=44100)
